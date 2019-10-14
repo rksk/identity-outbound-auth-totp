@@ -25,6 +25,7 @@ import org.owasp.encoder.Encode;
 import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.core.util.CryptoException;
 import org.wso2.carbon.extension.identity.helper.FederatedAuthenticatorUtil;
+import org.wso2.carbon.extension.identity.helper.IdentityHelperConstants;
 import org.wso2.carbon.extension.identity.helper.util.IdentityHelperUtil;
 import org.wso2.carbon.identity.application.authentication.framework.AbstractApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticatorFlowStatus;
@@ -138,24 +139,50 @@ public class TOTPAuthenticator extends AbstractApplicationAuthenticator
 	                                             AuthenticationContext context)
 			throws AuthenticationFailedException {
 		String username = null;
-		AuthenticatedUser authenticatedUser;
+        String usecase;
+        Object propertiesFromLocal = null;
+		AuthenticatedUser authenticatedUser = null;
+        Map<String, String> totpParameters = getAuthenticatorConfig().getParameterMap();
+
 		String tenantDomain = context.getTenantDomain();
 		context.setProperty(TOTPAuthenticatorConstants.AUTHENTICATION,
 		                    TOTPAuthenticatorConstants.AUTHENTICATOR_NAME);
 		if (!tenantDomain.equals(TOTPAuthenticatorConstants.SUPER_TENANT_DOMAIN)) {
 			IdentityHelperUtil
 					.loadApplicationAuthenticationXMLFromRegistry(context, getName(), tenantDomain);
+            propertiesFromLocal = context.getProperty(IdentityHelperConstants.GET_PROPERTY_FROM_REGISTRY);
 		}
+
+        if (propertiesFromLocal != null || tenantDomain.equals(TOTPAuthenticatorConstants.SUPER_TENANT)) {
+            usecase = totpParameters.get(TOTPAuthenticatorConstants.USECASE);
+        } else {
+            usecase = (String) context.getProperty(TOTPAuthenticatorConstants.USECASE);
+        }
+
 		String retryParam = "";
 		try {
-			FederatedAuthenticatorUtil.setUsernameFromFirstStep(context);
-			username = String.valueOf(context.getProperty("username"));
-			authenticatedUser = (AuthenticatedUser) context.getProperty("authenticatedUser");
-			// find the authenticated user.
+
+            if (StringUtils.isEmpty(usecase)) {
+                // If 'usecase' property is not configured for email OTP authenticator, the below flow will be executed
+                // (Recommended flow)
+                setUsernameFromSubjectStep(context);
+            } else {
+                // If the attribute 'usecase' is configured, this block will be executed.
+                // This block need to be revised and recommended to be removed
+                FederatedAuthenticatorUtil.setUsernameFromFirstStep(context);
+            }
+
+			username = String.valueOf(context.getProperty(TOTPAuthenticatorConstants.USERNAME));
+			authenticatedUser = (AuthenticatedUser) context.getProperty(TOTPAuthenticatorConstants.AUTHENTICATED_USER);
+
 			if (authenticatedUser == null) {
-				throw new AuthenticationFailedException(
-						"Authentication failed!. Cannot proceed further without identifying the user");
+				throw new AuthenticationFailedException
+						("Authentication failed!. Cannot proceed further without identifying the user.");
 			}
+            if (username == null) {
+                throw new AuthenticationFailedException
+						("Authentication failed. Cannot find the subject attributed step with authenticated user.");
+            }
 			if (context.isRetrying()) {
 				retryParam = "&authFailure=true&authFailureMsg=login.fail.message";
 			}
@@ -283,7 +310,7 @@ public class TOTPAuthenticator extends AbstractApplicationAuthenticator
 	                                             AuthenticationContext context)
 			throws AuthenticationFailedException {
 		String token = request.getParameter(TOTPAuthenticatorConstants.TOKEN);
-		String username = context.getProperty("username").toString();
+		String username = context.getProperty(TOTPAuthenticatorConstants.USERNAME).toString();
 		if (context.getProperty(TOTPAuthenticatorConstants.ENABLE_TOTP) != null && Boolean
 				.valueOf(context.getProperty(TOTPAuthenticatorConstants.ENABLE_TOTP).toString())) {
 			//adds the claims to the profile if the user enrol and continued.
@@ -375,12 +402,11 @@ public class TOTPAuthenticator extends AbstractApplicationAuthenticator
 	 * @return true, if token is generated successfully
 	 */
 	private boolean generateTOTPToken(AuthenticationContext context) {
-        String username;
-        if (context.getProperty("username") == null) {
+        String username = context.getProperty(TOTPAuthenticatorConstants.USERNAME).toString();
+        if (username == null) {
             log.error("No username found in the authentication context.");
             return false;
         } else {
-            username = context.getProperty("username").toString();
             try {
                 TOTPTokenGenerator.generateTOTPTokenLocal(username, context);
                 if (log.isDebugEnabled()) {
@@ -480,4 +506,21 @@ public class TOTPAuthenticator extends AbstractApplicationAuthenticator
 					"TOTPTokenVerifier cannot find the property value for encodingMethod");
 		}
 	}
+
+	private void setUsernameFromSubjectStep(AuthenticationContext context) {
+
+        String username = null;
+        AuthenticatedUser authenticatedUser = null;
+        Map<Integer, StepConfig> stepConfigMap = context.getSequenceConfig().getStepMap();
+        // Iterate through the steps to identify from which step the user attributes need to extracted
+        for (StepConfig stepConfig : stepConfigMap.values()) {
+            authenticatedUser = stepConfig.getAuthenticatedUser();
+            if (authenticatedUser != null && stepConfig.isSubjectAttributeStep()) {
+                username = authenticatedUser.getUserName();
+                break;
+            }
+        }
+        context.setProperty(TOTPAuthenticatorConstants.AUTHENTICATED_USER, authenticatedUser);
+        context.setProperty(TOTPAuthenticatorConstants.USERNAME, username);
+    }
 }

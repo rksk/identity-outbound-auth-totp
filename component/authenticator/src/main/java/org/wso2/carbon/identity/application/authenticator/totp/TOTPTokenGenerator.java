@@ -60,8 +60,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.wso2.carbon.identity.application.authenticator.totp.TOTPAuthenticatorConstants.TOKEN;
-
 /**
  * TOTP Token generator class.
  *
@@ -282,7 +280,7 @@ public class TOTPTokenGenerator {
 		properties.put(IdentityEventConstants.EventProperty.USER_NAME, userName);
 		properties.put(IdentityEventConstants.EventProperty.USER_STORE_DOMAIN, userStoreDomainName);
 		properties.put(IdentityEventConstants.EventProperty.TENANT_DOMAIN, tenantDomain);
-		properties.put(TOKEN, otpCode);
+		properties.put(TOTPAuthenticatorConstants.TOKEN, otpCode);
 		properties.put(TOTPAuthenticatorConstants.TEMPLATE_TYPE, notificationEvent);
 		Event identityMgtEvent = new Event(eventName, properties);
 		try {

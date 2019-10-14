@@ -71,4 +71,6 @@ public abstract class TOTPAuthenticatorConstants {
 	public static final String TEMPLATE_TYPE = "TEMPLATE_TYPE";
 	public static final String EVENT_NAME = "TOTP";
 	public static final String AUTHENTICATED_USER = "authenticatedUser";
+	public static final String USERNAME = "username";
+	public static final String USECASE = "usecase";
 }
